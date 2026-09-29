@@ -52,7 +52,7 @@ class Tool(ABC):
     parameters: dict = {"type": "object", "properties": {}}
 
     @abstractmethod
-    def run(self, context: TooThe lContext, **arguments) -> dict:
+    def run(self, context: ToolContext, **arguments) -> dict:
         """
         Execute the tool's core logic and return its output.
 
