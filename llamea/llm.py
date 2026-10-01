@@ -157,6 +157,20 @@ class LLM(ABC):
         if self.log:
             self.logger.log_conversation(self.model, message)
 
+        return self.parse_solution(message, parent_ids, HPO, base_code, diff_mode)
+
+    def parse_solution(
+        self,
+        message: str,
+        parent_ids: list | None = None,
+        HPO: bool = False,
+        base_code: str | None = None,
+        diff_mode: bool = False,
+    ):
+        """Parse the LLM's output into a ``Solution`` object; refer to :meth:`sample_solution` for specifics."""
+        if parent_ids is None:
+            parent_ids = []
+
         code = self.extract_algorithm_code(message)
 
         if diff_mode and isinstance(base_code, str):
@@ -423,7 +437,11 @@ class Gemini_LLM(LLM):
             str: model's reply.
         """
         history = [
-            {"role": m["role"], "parts": [m["content"]]} for m in session_messages[:-1]
+            {
+                "role": "model" if m["role"] == "assistant" else m["role"],
+                "parts": [{"text": m["content"]}],
+            }
+            for m in session_messages[:-1]
         ]
         last = session_messages[-1]["content"]
 

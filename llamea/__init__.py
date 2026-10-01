@@ -1,3 +1,4 @@
+from .agent import Agent
 from .llamea import LLaMEA
 from .llm import (
     LLM,
@@ -11,6 +12,7 @@ from .llm import (
 )
 from .loggers import ExperimentLogger
 from .solution import Solution
+from .tools import Tool, ToolContext
 from .utils import (
     NoCodeException,
     code_distance,

@@ -86,6 +86,19 @@ class ExperimentLogger:
         with jsonlines.open(f"{self.dirname}/conversationlog.jsonl", "a") as file:
             file.write(conversation_object)
 
+    def log_tool_call(self, record: dict):
+        """
+        Append a single tool-call entry to ``tool_calls.jsonl``.
+
+        Each entry captures the agent, the solution id, the round number, the
+        tool invoked, its arguments, and the output produced.
+
+        Args:
+            record (dict): The tool call record.
+        """
+        with jsonlines.open(f"{self.dirname}/tool_calls.jsonl", "a") as file:
+            file.write(convert_to_serializable(record))
+
     def set_attempt(self, attempt):
         self.attempt = attempt
 

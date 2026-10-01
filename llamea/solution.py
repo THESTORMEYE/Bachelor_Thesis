@@ -1,8 +1,10 @@
 import json
-import uuid
-import numpy as np
 import traceback
+import uuid
 from typing import Optional
+
+import numpy as np
+
 from llamea.multi_objective_fitness import Fitness
 
 
@@ -111,16 +113,23 @@ class Solution:
             line_no = None
             code_line = ""
 
-            if getattr(error, "__traceback__", None) is not None:
-                tb = traceback.extract_tb(error.__traceback__)
-                if tb:
-                    frame = tb[-1]
-                    line_no = frame.lineno
+            if isinstance(error, SyntaxError):
+                # Because that code was never executed, no frame for it appears in the traceback;
+                # instead, the exception itself carries the location.
+                line_no = error.lineno
+            elif getattr(error, "__traceback__", None) is not None:
+                # Inside the executed code, take the frame at the greatest depth
+                # don't simply take whatever frame ends up last. it might be from the evaluator, numpy, or elsewhere.
+                frames = [
+                    frame
+                    for frame in traceback.extract_tb(error.__traceback__)
+                    if frame.filename == "<string>"
+                ]
+                if frames:
+                    line_no = frames[-1].lineno
 
-                    if 1 <= line_no <= len(code_lines):
-                        code_line = code_lines[line_no - 1]
-
-            if line_no is not None:
+            if line_no is not None and 1 <= line_no <= len(code_lines):
+                code_line = code_lines[line_no - 1]
                 self.error += f"On line {line_no}: {code_line}.\n"
 
     def get_fitness_vector(self) -> list[float]:
