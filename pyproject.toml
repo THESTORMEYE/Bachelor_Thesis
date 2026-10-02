@@ -78,7 +78,8 @@ ela = [
 [tool.uv]
 default-groups = [
 ]
-# Relax pflacco's pins on numpy, scipy, scikit-learn and pandas.
+
+# Loosen pflacco's version constraints for numpy, scipy, scikit-learn, pandas
 override-dependencies = [
     "numpy>=1,<3",
     "scipy>=1.10.1",
