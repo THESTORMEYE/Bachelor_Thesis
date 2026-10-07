@@ -1,5 +1,6 @@
 from .agent import Agent
 from .ela import BBOBELATool
+from .ioh_analysis import IOHAnalysisTool
 from .llamea import LLaMEA
 from .llm import (
     LLM,
