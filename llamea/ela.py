@@ -59,14 +59,14 @@ class BBOBELATool(Tool):
         "(pronounced contrast between global and local optima), Homogeneous "
         "(absence of phase transitions), Multimodality (numerous local optima), "
         "Separable (decomposable along each dimension)."
-        )
+    )
 
     parameters = {"type": "object", "properties": {}}
 
     def __init__(self, fid: int, iids: list[int], dim: int):
         if ioh is None:
             raise ImportError(
-                "BBOBELATool needs ioh and pflacco with Deep-ELA."
+                "BBOBELATool needs ioh and pflacco with Deep-ELA. "
                 "Install via `uv sync --dev --group ela`."
             )
         self.fid = fid
@@ -100,7 +100,7 @@ class BBOBELATool(Tool):
             y = pd.Series(problem(X.values), index=X.index, dtype=float)
             deep.append(self.deep_ela(X, y, include_costs=False))
 
-            y[y == 0] = 0.1**100 
+            y[y == 0] = 0.1**100
             X_scaled = (X - X.min()) / (X.max() - X.min())
             y_scaled = (
                 0 * y if y.max() == y.min() else (y - y.min()) / (y.max() - y.min())
