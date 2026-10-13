@@ -1,8 +1,8 @@
 """
-# ELA toolkit for BBOB problems.
+ELA toolkit for BBOB problems.
 """
 
-import math
+import os
 
 try:
     import ioh
@@ -14,6 +14,7 @@ try:
         calculate_nbc,
         calculate_pca,
     )
+    from pflacco.deep_ela import load_large_50d_v1
     from pflacco.sampling import create_initial_sample
 
     FEATURE_SETS = (
@@ -24,16 +25,20 @@ try:
         calculate_pca,
         calculate_information_content,
     )
-except ModuleNotFoundError: 
+except ModuleNotFoundError:
     ioh = None
 
 import numpy as np
+import pandas as pd
+import xgboost as xgb
 
 from .tools import Tool, ToolContext
 
 SAMPLE_SIZE_PER_DIM = 250
-SEED = 0
+SEEDS = range(5)
 LOWER, UPPER = -5.0, 5.0
+PROPERTIES = ("Basins", "GlobalLocal", "Homogeneous", "Multimodality", "Separable")
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "ela_models")
 
 
 class BBOBELATool(Tool):
@@ -48,43 +53,70 @@ class BBOBELATool(Tool):
 
     name = "landscape_analysis"
 
-    description = """..."""
-    
+    description = (
+        "Estimated properties of the target problem's landscape, each expressed "
+        "as a probability in [0, 1]: Basins (uniform basin sizes), GlobalLocal "
+        "(pronounced contrast between global and local optima), Homogeneous "
+        "(absence of phase transitions), Multimodality (numerous local optima), "
+        "Separable (decomposable along each dimension)."
+        )
+
     parameters = {"type": "object", "properties": {}}
 
     def __init__(self, fid: int, iids: list[int], dim: int):
         if ioh is None:
             raise ImportError(
-                "BBOBELATool needs ioh and pflacco. Install via `uv sync --dev --group ela`."
+                "BBOBELATool needs ioh and pflacco with Deep-ELA."
+                "Install via `uv sync --dev --group ela`."
             )
         self.fid = fid
         self.iids = list(iids)
         self.dim = dim
+        self.deep_ela = load_large_50d_v1()
+        self.models = {}
+        for prop in PROPERTIES:
+            self.models[prop] = xgb.Booster()
+            self.models[prop].load_model(
+                os.path.join(MODEL_DIR, f"model_Groups_{prop}_llamea_fixed_labels.json")
+            )
 
     def run(self, context: ToolContext) -> dict:
-        X = create_initial_sample(
-            self.dim,
-            n=SAMPLE_SIZE_PER_DIM * self.dim,
-            lower_bound=LOWER,
-            upper_bound=UPPER,
-            seed=SEED,
-        )
-        X_scaled = (X - X.min()) / (X.max() - X.min())
-        per_instance = []
-        for iid in self.iids:
-            problem = ioh.get_problem(self.fid, iid, self.dim)
-            y = np.asarray(problem(X.values), dtype=float)
-            y_scaled = (y - y.min()) / (y.max() - y.min())
+        scores = [
+            self._predict(ioh.get_problem(self.fid, iid, self.dim)) for iid in self.iids
+        ]
+        return {prop: float(np.mean([s[prop] for s in scores])) for prop in PROPERTIES}
+
+    def _predict(self, problem) -> dict:
+        """Property probabilities for one problem instance."""
+        deep, classical = [], []
+        for seed in SEEDS:
+            X = create_initial_sample(
+                self.dim,
+                n=SAMPLE_SIZE_PER_DIM * self.dim,
+                lower_bound=LOWER,
+                upper_bound=UPPER,
+                seed=seed,
+            )
+            y = pd.Series(problem(X.values), index=X.index, dtype=float)
+            deep.append(self.deep_ela(X, y, include_costs=False))
+
+            y[y == 0] = 0.1**100 
+            X_scaled = (X - X.min()) / (X.max() - X.min())
+            y_scaled = (
+                0 * y if y.max() == y.min() else (y - y.min()) / (y.max() - y.min())
+            )
             features = {}
             for feature_set in FEATURE_SETS:
                 features.update(feature_set(X_scaled, y_scaled))
-            per_instance.append(features)
+            classical.append(features)
 
-        aggregated = {}
-        for key in per_instance[0]:
-            # *_x features depend on the fixed sample only.
-            if key.endswith("costs_runtime") or key.endswith("_x"):
-                continue
-            mean = float(np.mean([f[key] for f in per_instance]))
-            aggregated[key] = mean if math.isfinite(mean) else None
-        return aggregated
+        classical = (
+            pd.DataFrame(classical).dropna().filter(regex="^(?!.*costs_runtime)")
+        )
+        row = {**pd.DataFrame(deep).mean(), "dim": self.dim, **classical.mean()}
+        return {
+            prop: float(
+                model.predict(xgb.DMatrix(pd.DataFrame([row])[model.feature_names]))[0]
+            )
+            for prop, model in self.models.items()
+        }

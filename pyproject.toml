@@ -72,12 +72,19 @@ apple-silicon = [
     "mlx_lm>=0.29.1,<1; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
 ela = [
-    "pflacco>=1.2.2,<2",
+    "pflacco",
+    "torch>=2.6.0,<3",
+    "lightning>=2,<3",
+    "einops>=0.8,<1",
+    "pyyaml>=6,<7",
 ]
 
 [tool.uv]
 default-groups = [
 ]
+
+# pflacco now has Deep-ELA
+sources = { pflacco = { path = "../pflacco" } }
 
 # Loosen pflacco's version constraints for numpy, scipy, scikit-learn, pandas
 override-dependencies = [
