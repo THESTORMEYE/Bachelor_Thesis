@@ -120,3 +120,49 @@ class BBOBELATool(Tool):
             )
             for prop, model in self.models.items()
         }
+
+BBOB_LABELS = {
+    1: (0, 0, 1, 0, 1),
+    2: (0, 0, 1, 0, 1),
+    3: (1, 1, 1, 1, 1),
+    4: (1, 1, 1, 1, 1),
+    5: (0, 0, 1, 0, 1),
+    6: (0, 0, 0, 0, 0),
+    7: (0, 0, 1, 0, 0),
+    8: (1, 1, 0, 1, 0),
+    9: (1, 1, 0, 1, 0),
+    10: (0, 0, 1, 0, 0),
+    11: (0, 0, 1, 0, 0),
+    12: (0, 0, 1, 0, 0),
+    13: (0, 0, 0, 0, 0),
+    14: (0, 0, 0, 0, 0),
+    15: (1, 1, 1, 1, 0),
+    16: (1, 1, 1, 1, 0),
+    17: (1, 1, 0, 1, 0),
+    18: (1, 1, 0, 1, 0),
+    19: (1, 1, 1, 1, 0),
+    20: (1, 1, 1, 1, 0),
+    21: (1, 1, 1, 1, 0),
+    22: (1, 1, 1, 1, 0),
+    23: (1, 1, 1, 1, 0),
+    24: (1, 1, 1, 1, 0),
+}
+
+
+class BBOBOracleTool(BBOBELATool):
+    """
+    BBOB ground truth problem properties. Exposed like :class:`BBOBELATool`.
+    Ensures fair comparison of the tools.
+    Source: Tanabe 2021, Tbl. 2 (revises Mersmann 2010).
+
+    Args:
+        fid: BBOB function ID.
+    """
+
+    def __init__(self, fid: int):
+        self.fid = fid
+
+    def run(self, context: ToolContext) -> dict:
+        return {
+            prop: float(label) for prop, label in zip(PROPERTIES, BBOB_LABELS[self.fid])
+        }
