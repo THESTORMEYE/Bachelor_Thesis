@@ -1,5 +1,5 @@
 from .agent import Agent
-from .ela import BBOBELATool
+from .ela import BBOBELATool, BBOBOracleTool
 from .llamea import LLaMEA
 from .llm import (
     LLM,
