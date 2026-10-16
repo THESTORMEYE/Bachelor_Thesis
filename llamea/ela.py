@@ -54,11 +54,12 @@ class BBOBELATool(Tool):
     name = "landscape_analysis"
 
     description = (
-        "Estimated properties of the target problem's landscape, each expressed "
-        "as a probability in [0, 1]: Basins (uniform basin sizes), GlobalLocal "
-        "(pronounced contrast between global and local optima), Homogeneous "
-        "(absence of phase transitions), Multimodality (numerous local optima), "
-        "Separable (decomposable along each dimension)."
+        "Exposes the target function's structure before you lock in a design, "
+        "as probabilities in [0, 1] for Basins (uniform basin "
+        "sizes), GlobalLocal (pronounced contrast between global and local "
+        "optima), Homogeneous (absence of phase transitions), Multimodality "
+        "(numerous local optima) and Separable (decomposable along each "
+        "dimension)."
     )
 
     parameters = {"type": "object", "properties": {}}
@@ -120,6 +121,7 @@ class BBOBELATool(Tool):
             )
             for prop, model in self.models.items()
         }
+
 
 BBOB_LABELS = {
     1: (0, 0, 1, 0, 1),

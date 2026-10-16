@@ -12,14 +12,12 @@ import os
 
 from .tools import Tool, ToolContext
 
-
 # AOCC precision limits (misc.utils.aoc_logger).
 AOCC_LOWER, AOCC_UPPER = 1e-8, 1e2
 CHECKPOINTS = (0.1, 0.25, 0.5, 1.0)
 
 
 class IOHAnalysisTool(Tool):
-
     """
     Parent-run convergence stats.
 
@@ -32,12 +30,19 @@ class IOHAnalysisTool(Tool):
     name = "performance_analysis"
 
     description = (
-        "Parent-run stats: AOCC spread (1.0 best), median best-so-far gap (f − f_opt) at 10/25/50/100% budget, and median last-improvement evaluation."
+        "Captures how your parent algorithms performed in practice, before you "
+        "mutate them: convergence speed, stagnation points, and consistency. "
+        "Metrics: AOCC dispersion (1.0 = best), median best-so-far gap "
+        "(f − f_opt) at 10/25/50/100% of budget, and median last-improvement."
     )
 
     parameters = {"type": "object", "properties": {}}
 
     def __init__(self, budget: int):
+        if iohinspector is None:
+            raise ImportError(
+                "IOHAnalysisTool depends on iohinspector. Please install it with: `uv sync --dev`"
+            )
         self.budget = budget
 
     def run(self, context: ToolContext) -> dict:
