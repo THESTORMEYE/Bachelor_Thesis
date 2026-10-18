@@ -5,15 +5,16 @@ import textwrap
 import ioh
 import numpy as np
 
-from llamea import Agent, BBOBELATool, Gemini_LLM, IOHAnalysisTool, LLaMEA
+from llamea import Agent, BBOBOracleTool, Gemini_LLM, IOHAnalysisTool, LLaMEA
+from misc import OverBudgetException, aoc_logger, correct_aoc
 
 MODEL = "gemini-3.5-flash-lite"
-FID = 21
+FID = 3
 DIM = 5
 IIDS = [1, 2, 3]
 SEEDS = [0, 1, 2]
-BUDGET = 2000 * DIM
-REPETITIONS = 3
+BUDGET = 200 * DIM
+REPETITIONS = 5
 
 
 def evaluate(solution, explogger):
@@ -24,31 +25,31 @@ def evaluate(solution, explogger):
         folder_name=solution.id,
         algorithm_name=solution.name,
     )
-    precisions = []
+    l2 = aoc_logger(budget=BUDGET, upper=1e2, triggers=[ioh.logger.trigger.ALWAYS])
+    loggers = ioh.logger.Combine([analyzer, l2])
+    aucs = []
 
     try:
         for iid in IIDS:
             problem = ioh.get_problem(FID, iid, DIM)
-            problem.attach_logger(analyzer)
+            problem.attach_logger(loggers)
             for seed in SEEDS:
                 random.seed(seed)
                 np.random.seed(seed)
-                namespace[solution.name](budget=BUDGET, dim=DIM)(problem)
-                if problem.state.evaluations > BUDGET:
-                    raise ValueError(
-                        f"{problem.state.evaluations} evaluations used, "
-                        f"with limit of {BUDGET}."
-                    )
-                precisions.append(problem.state.current_best.y - problem.optimum.y)
+                try:
+                    namespace[solution.name](budget=BUDGET, dim=DIM)(problem)
+                except OverBudgetException:
+                    pass
+                aucs.append(correct_aoc(problem, l2, BUDGET))
+                l2.reset(problem)
                 problem.reset()
     finally:
         analyzer.close()
-    scores = -np.log10(np.array(precisions) + 1e-8)
-    score_mean = float(np.mean(scores))
-    score_std = float(np.std(scores))
-    score_median = float(np.median(scores))
-    feedback = f"{solution.name}: n={len(scores)}; mean={score_mean:.2f}, sd={score_std:.2f}, med={score_median:.2f}; score=-log10(f-f_opt), 8=best"
-    solution.set_scores(score_mean, feedback)
+    auc_mean = float(np.mean(aucs))
+    auc_std = float(np.std(aucs))
+    feedback = f"The algorithm {solution.name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean:0.2f} with standard deviation {auc_std:0.2f}."
+    solution.add_metadata("aucs", aucs)
+    solution.set_scores(auc_mean, feedback)
     return solution
 
 
@@ -64,20 +65,22 @@ if __name__ == "__main__":
     llm = Gemini_LLM(os.getenv("GEMINI_API_KEY"), MODEL)
     tools = {
         "no_tools": None,
-        "ela": BBOBELATool(fid=FID, iids=IIDS, dim=DIM),
         "ioh": IOHAnalysisTool(budget=BUDGET),
+        "oracle": BBOBOracleTool(fid=FID),
     }
 
     for repetition in range(REPETITIONS):
         for condition, tool in tools.items():
             es = LLaMEA(
                 evaluate,
-                n_parents=4,
-                n_offspring=4,
+                n_parents=2,
+                n_offspring=5,
                 llm=Agent(llm, tools=[tool]) if tool else llm,
                 task_prompt=task_prompt,
                 experiment_name=f"{condition}-f{FID}-{DIM}D-{repetition}",
-                budget=20,
+                elitism=True,
+                HPO=False,
+                budget=26,
             )
             best = es.run()
             print(condition, repetition, best.fitness)
