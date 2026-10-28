@@ -88,7 +88,7 @@ class Agent:
 
     def query(self, session_messages):
         """
-        A straightforward model query that does not invoke any tools. 
+        A straightforward model query that does not invoke any tools.
         """
         return self.llm.query(session_messages)
 
@@ -101,10 +101,10 @@ class Agent:
         return textwrap.dedent("""
 
             ## Tools
-            You have the option to invoke tools before producing your final
-            answer in order to collect additional information. Use them only when
-            you believe the returned output would alter your response. To invoke
-            one or more tools, respond with blocks in the following shape
+            Before answering, you may use tools. They reveal task details and
+            context about the parent algorithms that this prompt does not include.
+            Checking them first typically yields better-grounded designs. To trigger
+            one or more tools, reply with blocks formatted as such:
 
             ```tool
             {"name": "<tool name>", "arguments": {<arguments>}}
@@ -156,7 +156,7 @@ class Agent:
                         {
                             "role": "user",
                             "content": "Your tool budget has been exhausted. Please provide "
-                                    "your final answer now, without using any tool blocks.",
+                            "your final answer now, without using any tool blocks.",
                         }
                     )
                 else:

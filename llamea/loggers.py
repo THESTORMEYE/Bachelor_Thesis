@@ -131,7 +131,9 @@ class ExperimentLogger:
             code (str): The source code to be logged.
         """
         with open(
-            f"{self.dirname}/code/try-{attempt}-{algorithm_name}.py", "w"
+            f"{self.dirname}/code/try-{attempt}-{algorithm_name}.py",
+            "w",
+            encoding="utf-8",
         ) as file:
             file.write(code)
         self.attempt = attempt
