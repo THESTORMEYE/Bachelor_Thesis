@@ -10,6 +10,8 @@ the agent that invokes it.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from .solution import Solution
+
 
 @dataclass
 class ToolContext:
@@ -21,11 +23,17 @@ class ToolContext:
     run data that the evaluation function saved for those solutions.
     - log_dir: The experiment's directory, provided when logging is turned on.
     - caller: The agent's name that initiated the call.
+    - draft: The candidate extracted from this response, or None when no code
+    block exists.
+    - call_id: This call's identifier, stored with the log; tools may use it to
+    name saved data.
     """
 
     parent_ids: list = field(default_factory=list)
     log_dir: str | None = None
     caller: str = ""
+    draft: Solution | None = None
+    call_id: str = ""
 
 
 class Tool(ABC):

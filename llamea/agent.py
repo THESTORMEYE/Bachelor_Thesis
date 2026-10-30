@@ -10,7 +10,10 @@ to invoke.
 import json
 import re
 import textwrap
+import time
+from dataclasses import replace
 from datetime import datetime
+from uuid import uuid4
 
 from .tools import Tool, ToolContext
 
@@ -28,8 +31,8 @@ class Agent:
     Couples an :class:`~llamea.llm.LLM` with a collection of tools and runs a
     model-driven loop that governs tool usage.
 
-    ``Agent`` implements the methods LLaMEA expects from an ``LLM``—``model``,
-    ``query``, ``sample_solution``, and ``set_logger``—so it can be supplied
+    ``Agent`` implements the methods LLaMEA expects from an ``LLM`` (``model``,
+    ``query``, ``sample_solution``, and ``set_logger``), so it can be supplied
     wherever an ``LLM`` is accepted, e.g.
     ``LLaMEA(f, llm=Agent(llm, tools=[...]))``. When the tool list is empty, the
     agent forwards to the wrapped LLM and keeps an empty ``tool_calls`` record.
@@ -44,9 +47,9 @@ class Agent:
         answer directly without tools.
 
     Persistence:
-        Every invocation is stored in ``solution.metadata["tool_calls"]``. When
-        logging is active, a complete record—including tool outputs—is written to
-        ``tool_calls.jsonl``.
+        All calls are recorded in ``solution.metadata["tool_calls"]``. With logging
+        enabled, each full entry (tool outputs, the reply's draft code, and call
+        duration) is written to ``tool_calls.jsonl``.
 
     Args:
         llm: The LLM that handles all queries and extracts the final answer.
@@ -110,10 +113,11 @@ class Agent:
             {"name": "<tool name>", "arguments": {<arguments>}}
             ```
 
-            and nothing else in that reply; the tool outputs will then be
-            delivered back to you. A maximum of %d rounds of tool invocation is
-            permitted. Once you have gathered sufficient information, provide
-            your final answer in the required format, without any tool blocks.
+            Results come back to you. If a reply with tool blocks also contains
+            one code block in the required format, code-evaluating tools will use
+            it. You may run at most %d rounds of tool calls. When ready, give your
+            final answer in the required format, with no tool blocks, and repeat
+            the full code even if unchanged.
 
             Tools at your disposal:
             """) % self.max_tool_rounds + tools
@@ -144,6 +148,16 @@ class Agent:
         )
         records = []
         solution = None
+
+        def parse(reply):
+            return self.llm.parse_solution(
+                self.call_pattern.sub("", reply),
+                parent_ids,
+                HPO=HPO,
+                base_code=base_code,
+                diff_mode=diff_mode,
+            )
+
         try:
             response = self._query(messages)
             for round_ in range(1, self.max_tool_rounds + 2):
@@ -155,21 +169,24 @@ class Agent:
                     messages.append(
                         {
                             "role": "user",
-                            "content": "Your tool budget has been exhausted. Please provide "
-                            "your final answer now, without using any tool blocks.",
+                            "content": "Your tool budget has been exhausted. Please "
+                            "provide your final answer now, without using any tool "
+                            "blocks.",
                         }
                     )
                 else:
-                    results = [self._call(c, context, round_) for c in calls]
+                    try:
+                        draft = parse(response)
+                    except Exception:
+                        draft = None
+                    round_context = replace(context, draft=draft)
+                    results = [self._call(c, round_context, round_) for c in calls]
                     records += results
                     messages.append(
                         {"role": "user", "content": self._format(results, round_)}
                     )
                 response = self._query(messages)
-            final = self.call_pattern.sub("", response)
-            solution = self.llm.parse_solution(
-                final, parent_ids, HPO=HPO, base_code=base_code, diff_mode=diff_mode
-            )
+            solution = parse(response)
             solution.add_metadata(
                 "tool_calls",
                 [
@@ -190,6 +207,8 @@ class Agent:
         return response
 
     def _call(self, raw, context, round_):
+        start = time.perf_counter()
+        context = replace(context, call_id=uuid4().hex[:8])
         try:
             call = json.loads(raw)
             name, arguments = call["name"], call.get("arguments", {})
@@ -208,11 +227,14 @@ class Agent:
                 output = tool.invoke(arguments, context)
         return {
             "time": f"{datetime.now()}",
+            "call_id": context.call_id,
             "round": round_,
             "tool": name,
             "arguments": arguments,
             "ok": output["ok"],
             "output": output,
+            "draft": getattr(context.draft, "code", None),
+            "duration": time.perf_counter() - start,
         }
 
     def _format(self, results, round_):
