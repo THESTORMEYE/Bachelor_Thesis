@@ -47,9 +47,9 @@ class Agent:
         answer directly without tools.
 
     Persistence:
-        All calls are recorded in ``solution.metadata["tool_calls"]``. With logging
-        enabled, each full entry (tool outputs, the reply's draft code, and call
-        duration) is written to ``tool_calls.jsonl``.
+        Every call lands in ``solution.metadata["tool_calls"]``. When logging is on,
+        each complete entry (tool outputs, the reply's draft code and experiment
+        script, and how long the call took) goes to ``tool_calls.jsonl``.
 
     Args:
         llm: The LLM that handles all queries and extracts the final answer.
@@ -63,6 +63,7 @@ class Agent:
     """
 
     call_pattern = re.compile(r"```tool\s*\n(.*?)\n\s*```", re.DOTALL)
+    experiment_pattern = re.compile(r"```experiment\s*\n(.*?)\n\s*```", re.DOTALL)
 
     def __init__(
         self,
@@ -113,11 +114,12 @@ class Agent:
             {"name": "<tool name>", "arguments": {<arguments>}}
             ```
 
-            Results come back to you. If a reply with tool blocks also contains
-            one code block in the required format, code-evaluating tools will use
-            it. You may run at most %d rounds of tool calls. When ready, give your
-            final answer in the required format, with no tool blocks, and repeat
-            the full code even if unchanged.
+            You get the results back. Tools that evaluate code only see code in the
+            same reply: put the complete code in the required format next to the
+            tool block. Experiment tools likewise need a single ```experiment block
+            in that reply. Tool call
+            rounds are capped at %d. Once done, deliver the final answer in the required
+            format, without tool blocks, restating the whole code even if nothing changed.
 
             Tools at your disposal:
             """) % self.max_tool_rounds + tools
@@ -150,8 +152,9 @@ class Agent:
         solution = None
 
         def parse(reply):
+            reply = self.experiment_pattern.sub("", self.call_pattern.sub("", reply))
             return self.llm.parse_solution(
-                self.call_pattern.sub("", reply),
+                reply,
                 parent_ids,
                 HPO=HPO,
                 base_code=base_code,
@@ -179,7 +182,10 @@ class Agent:
                         draft = parse(response)
                     except Exception:
                         draft = None
-                    round_context = replace(context, draft=draft)
+                    script = self.experiment_pattern.search(response)
+                    round_context = replace(
+                        context, draft=draft, script=script and script.group(1)
+                    )
                     results = [self._call(c, round_context, round_) for c in calls]
                     records += results
                     messages.append(
@@ -234,6 +240,7 @@ class Agent:
             "ok": output["ok"],
             "output": output,
             "draft": getattr(context.draft, "code", None),
+            "script": context.script,
             "duration": time.perf_counter() - start,
         }
 

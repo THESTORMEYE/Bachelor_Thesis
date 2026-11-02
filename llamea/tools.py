@@ -25,6 +25,7 @@ class ToolContext:
     - caller: The agent's name that initiated the call.
     - draft: The candidate extracted from this response, or None when no code
     block exists.
+    - script: The ``experiment`` block from this reply, if any; otherwise None.
     - call_id: This call's identifier, stored with the log; tools may use it to
     name saved data.
     """
@@ -33,6 +34,7 @@ class ToolContext:
     log_dir: str | None = None
     caller: str = ""
     draft: Solution | None = None
+    script: str | None = None
     call_id: str = ""
 
 
