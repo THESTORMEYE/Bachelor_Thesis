@@ -4,6 +4,7 @@ import warnings
 
 from typing import Any
 import jsonlines
+from filelock import FileLock
 import numpy as np
 import math
 
@@ -83,7 +84,10 @@ class ExperimentLogger:
             "time": f"{datetime.now()}",
             "content": content,
         }
-        with jsonlines.open(f"{self.dirname}/conversationlog.jsonl", "a") as file:
+        with (
+            self._lock(),
+            jsonlines.open(f"{self.dirname}/conversationlog.jsonl", "a") as file,
+        ):
             file.write(conversation_object)
 
     def log_tool_call(self, record: dict):
@@ -96,8 +100,14 @@ class ExperimentLogger:
         Args:
             record (dict): The tool call record.
         """
-        with jsonlines.open(f"{self.dirname}/tool_calls.jsonl", "a") as file:
+        with (
+            self._lock(),
+            jsonlines.open(f"{self.dirname}/tool_calls.jsonl", "a") as file,
+        ):
             file.write(convert_to_serializable(record))
+
+    def _lock(self):
+        return FileLock(os.path.join(self.dirname, ".log.lock"))
 
     def set_attempt(self, attempt):
         self.attempt = attempt
@@ -118,7 +128,7 @@ class ExperimentLogger:
             individual (Individual): potential solution to be logged.
         """
         ind_dict = individual.to_dict()
-        with jsonlines.open(f"{self.dirname}/log.jsonl", "a") as file:
+        with self._lock(), jsonlines.open(f"{self.dirname}/log.jsonl", "a") as file:
             file.write(convert_to_serializable(ind_dict))
 
     def log_code(self, attempt, algorithm_name, code):
@@ -170,9 +180,12 @@ class ExperimentLogger:
             `import_fails: list[str]`: List of libraries needed to import.
         """
 
-        with jsonlines.open(
-            os.path.join(self.dirname, "import_failures.jsonl"), "a"
-        ) as writer:
+        with (
+            self._lock(),
+            jsonlines.open(
+                os.path.join(self.dirname, "import_failures.jsonl"), "a"
+            ) as writer,
+        ):
             writer.write({"import_misses": import_fails})
 
     def log_solution(self, solution: Solution, sol_data: Any):
@@ -185,9 +198,12 @@ class ExperimentLogger:
 
         """
 
-        with jsonlines.open(
-            os.path.join(self.dirname, "solutions.jsonl"), "a"
-        ) as writer:
+        with (
+            self._lock(),
+            jsonlines.open(
+                os.path.join(self.dirname, "solutions.jsonl"), "a"
+            ) as writer,
+        ):
             if solution.code and not math.isnan(solution.fitness) and sol_data:
                 writer.write(
                     {"id": solution.id, "fitness": solution.fitness, "output": sol_data}

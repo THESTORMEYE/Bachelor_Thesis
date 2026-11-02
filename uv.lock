@@ -2604,6 +2604,7 @@ version = "1.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "configspace" },
+    { name = "filelock" },
     { name = "google-genai" },
     { name = "joblib" },
     { name = "jsonlines" },
@@ -2677,6 +2678,7 @@ llm-extras = [
 [package.metadata]
 requires-dist = [
     { name = "configspace", specifier = ">=1.2.0,<2" },
+    { name = "filelock", specifier = ">=3.32.4" },
     { name = "google-genai", specifier = ">=1,<2" },
     { name = "joblib", specifier = ">=1.4.2,<2" },
     { name = "jsonlines", specifier = ">=4.0.0,<5" },
