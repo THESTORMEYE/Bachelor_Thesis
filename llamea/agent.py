@@ -16,6 +16,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from .tools import Tool, ToolContext
+from .utils import NoCodeException
 
 
 def _flatten(items):
@@ -44,7 +45,8 @@ class Agent:
         invokes the named tool, appends the result to the conversation, and issues
         another query. The first reply that lacks tool blocks is treated as the
         solution. If ``max_tool_rounds`` is reached, the model is prompted to
-        answer directly without tools.
+        answer directly without tools. If code is ommitted, the previous version is 
+        used.
 
     Persistence:
         Every call lands in ``solution.metadata["tool_calls"]``. When logging is on,
@@ -103,23 +105,17 @@ class Agent:
             for t in self.tools.values()
         )
         return textwrap.dedent("""
-
-            ## Tools
-            Before answering, you may use tools. They reveal task details and
-            context about the parent algorithms that this prompt does not include.
-            Checking them first typically yields better-grounded designs. To trigger
-            one or more tools, reply with blocks formatted as such:
+            ## Tools  
+            You may call tools before answering. They can reveal details not in this prompt, 
+            so checking first often improves designs. Invoke them by replying with blocks like:
 
             ```tool
             {"name": "<tool name>", "arguments": {<arguments>}}
             ```
 
-            You get the results back. Tools that evaluate code only see code in the
-            same reply: put the complete code in the required format next to the
-            tool block. Experiment tools likewise need a single ```experiment block
-            in that reply. Tool call
-            rounds are capped at %d. Once done, deliver the final answer in the required
-            format, without tool blocks, restating the whole code even if nothing changed.
+            Results are returned to you. Tool-call rounds are limited to %d. Afterward, give
+            the final answer in the required format without tool blocks; repeat the full code only 
+            if it has changed since your last output.
 
             Tools at your disposal:
             """) % self.max_tool_rounds + tools
@@ -150,6 +146,7 @@ class Agent:
         )
         records = []
         solution = None
+        draft = None
 
         def parse(reply):
             reply = self.experiment_pattern.sub("", self.call_pattern.sub("", reply))
@@ -168,6 +165,12 @@ class Agent:
                 if not calls:
                     break
                 messages.append({"role": "assistant", "content": response})
+                try:
+                    draft = parse(response)
+                except NoCodeException:
+                    pass
+                except Exception:
+                    draft = None
                 if round_ > self.max_tool_rounds:
                     messages.append(
                         {
@@ -178,10 +181,6 @@ class Agent:
                         }
                     )
                 else:
-                    try:
-                        draft = parse(response)
-                    except Exception:
-                        draft = None
                     script = self.experiment_pattern.search(response)
                     round_context = replace(
                         context, draft=draft, script=script and script.group(1)
@@ -192,7 +191,12 @@ class Agent:
                         {"role": "user", "content": self._format(results, round_)}
                     )
                 response = self._query(messages)
-            solution = parse(response)
+            try:
+                solution = parse(response)
+            except NoCodeException:
+                if draft is None:
+                    raise
+                solution = draft
             solution.add_metadata(
                 "tool_calls",
                 [
