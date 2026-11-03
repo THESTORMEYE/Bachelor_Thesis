@@ -9,6 +9,8 @@ import tempfile
 
 from .tools import Tool, ToolContext
 
+ENV_KEYS = ("PATH", "SYSTEMROOT")
+
 
 class ExperimentTool(Tool):
     """
@@ -26,14 +28,15 @@ class ExperimentTool(Tool):
         self.timeout = timeout
         self.max_output_chars = max_output_chars
         self.description = (
-            "Takes the experiment block in this reply and executes it as a "
-            "Python script alongside the complete code, which must be given in "
-            "the required format in the same reply; the script can pull in "
-            "the latter with `from candidate import <ClassName>`. Whatever it "
-            "prints comes back. numpy, scipy and ioh are on hand. Ceiling of "
-            f"{timeout} s; per stream, only the trailing "
-            f"{max_output_chars} characters survive."
-        )
+            "Runs the experiment block in this reply as a Python script beside "
+            "your latest complete code; the script can import that code with "
+            "`from candidate import <ClassName>`. Its printed output is returned. "
+            "You design the experiment. numpy, scipy, and ioh are available "
+            "(`ioh.get_problem(fid, instance, dimension)`, called as `problem(x)`). "
+            f"Timeout: {timeout} s; each stream keeps only its last "
+            f"{max_output_chars} characters. Format:\n"
+            "  ```experiment\n  <python script>\n  ```"
+)
 
     def run(self, context: ToolContext) -> dict:
         if context.draft is None:
@@ -57,6 +60,7 @@ class ExperimentTool(Tool):
                 result = subprocess.run(
                     [sys.executable, "experiment.py"],
                     cwd=tmp,
+                    env={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
                     capture_output=True,
                     text=True,
                     timeout=self.timeout,
@@ -65,12 +69,15 @@ class ExperimentTool(Tool):
                 result = subprocess.CompletedProcess(e.cmd, None, e.stdout, e.stderr)
         return {
             "returncode": result.returncode,
-            "stdout": self._tail(result.stdout),
-            "stderr": self._tail(result.stderr),
+            "stdout": self._tail(result.stdout, tmp),
+            "stderr": self._tail(result.stderr, tmp),
             "timed_out": result.returncode is None,
         }
 
-    def _tail(self, text) -> str:
+    def _tail(self, text, tmp: str) -> str:
         if isinstance(text, bytes):
             text = text.decode(errors="replace")
-        return (text or "")[-self.max_output_chars :]
+        text = text or ""
+        for prefix in sorted({tmp, sys.prefix, sys.base_prefix}, key=len, reverse=True):
+            text = text.replace(prefix + os.sep, "")
+        return text[-self.max_output_chars :]
