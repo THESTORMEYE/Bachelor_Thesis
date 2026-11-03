@@ -156,20 +156,20 @@ if __name__ == '__main__':
     llm = Ollama_LLM('gemma4:latest')
 
     operators = [
-        Operator('mutation',
-                 'Write a new algorithm, that applies small but significant changes to the mentioned algorithms',
+        Operator('Write a new algorithm, that applies small but significant changes to the mentioned algorithms',
+                 'mutation',
                  0.2,
                  1
         ),
         Operator(
-            'mutation',
             'Write a new algorithm that is completely different that the one mentioned.',
+            'mutation',
             0.2,
             1
         ),
         Operator(
-            'crosover',
             'Write a new algorithm that is build from the strengths of a subset of the mentioned algorithms.',
+            'crosover',
             0.6,
             3
         )
