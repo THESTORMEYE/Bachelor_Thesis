@@ -23,8 +23,7 @@ class ToolContext:
     run data that the evaluation function saved for those solutions.
     - log_dir: The experiment's directory, provided when logging is turned on.
     - caller: The agent's name that initiated the call.
-    - draft: The candidate extracted from this response, or None when no code
-    block exists.
+    - draft: The latest candidate extracted from the response(s). None if no such code has yet been parsed.  
     - script: The ``experiment`` block from this reply, if any; otherwise None.
     - call_id: This call's identifier, stored with the log; tools may use it to
     name saved data.
@@ -53,8 +52,6 @@ class Tool(ABC):
     method returns a small JSON-serializable dictionary of evidence (such as
     measurements, statistics, or metadata). It may optionally include a short
     "summary" string. The method should not instruct the model on what to do.
-
-
     """
 
     name: str = ""
