@@ -25,8 +25,11 @@ class QuickEvalTool(Tool):
         self.evaluate = evaluate
         self.max_runs = max_runs
         self.description = (
-            "Evaluates your newest full code on problem instances not used for "
-            f"scoring; extra runs give a more reliable estimate. {metrics}"
+            "Scores the complete code from this reply—or from your most recent reply "
+            "containing code—on problem instances excluded from scoring. Code from "
+            "the prompt's parent does not count: put your code first, in the required "
+            "format, in the same reply as the tool block. More runs yield a more "
+            f"reliable estimate. {metrics}"
         )
         self.parameters = {
             "type": "object",
@@ -40,7 +43,7 @@ class QuickEvalTool(Tool):
         if context.draft is None:
             raise ValueError(
                 "No code block appears in this reply. "
-                "Provide the full code in the required format within the same reply as the tool block."
+                "Reply again with the full code in the required format and the tool block."
             )
         if context.log_dir is None:
             raise ValueError("Logging must be enabled for quick evaluation.")

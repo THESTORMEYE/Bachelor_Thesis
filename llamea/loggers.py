@@ -106,6 +106,18 @@ class ExperimentLogger:
         ):
             file.write(convert_to_serializable(record))
 
+    def log_usage(self, record: dict):
+        """
+        Write the token usage for a single LLM call into ``usage.jsonl``.
+
+        Args:
+            record (dict): The usage record.
+        """
+        with (
+            self._lock(),
+            jsonlines.open(f"{self.dirname}/usage.jsonl", "a") as file,
+        ):
+            file.write({"time": f"{datetime.now()}", **record})
     def _lock(self):
         return FileLock(os.path.join(self.dirname, ".log.lock"))
 

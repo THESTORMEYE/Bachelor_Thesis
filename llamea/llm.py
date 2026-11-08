@@ -25,6 +25,11 @@ try:
     import openai
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     openai = None
+
+try:
+    import anthropic
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    anthropic = None
 try:
     import lmstudio as lms
 except ModuleNotFoundError:
@@ -177,11 +182,15 @@ class LLM(ABC):
             dfm = DiffModeManager(base_code, code)
             code = dfm()
 
-        name = re.findall(
-            r"(?:def|class)\s*(\w*).*\:",
-            code,
-            re.IGNORECASE,
-        )[0]
+        # Place the top-level class implementing __call__ before its helper functions.
+        match = re.search(
+            r"^class\s+(\w+)(?:(?!^class\s).)*?def __call__", code, re.M | re.S
+        )
+        name = (
+            match.group(1)
+            if match
+            else re.findall(r"(?:def|class)\s*(\w*).*\:", code, re.IGNORECASE)[0]
+        )
         desc = self.extract_algorithm_description(message)
         cs = None
         if HPO and ConfigurationSpace is not None:
@@ -472,6 +481,55 @@ class Gemini_LLM(LLM):
 
                 time.sleep(wait)
 
+class Claude_LLM(LLM):
+    """
+    Handles requests to Anthropic Claude models.
+    """
+
+    def __init__(self, api_key, model="claude-haiku-5-5", **kwargs):
+        """
+        Args:
+            api_key (str): key used for authentication.
+            model (str, optional): identifier of the model. Defaults to "claude-haiku-5-5".
+        """
+        if anthropic is None:  # pragma: no cover - optional dependency
+            raise ImportError(
+                "anthropic is required to use Claude_LLM. Install the 'anthropic' package."
+            )
+        super().__init__(api_key, model, None, **kwargs)
+        self.client = anthropic.Anthropic(api_key=api_key, max_retries=5, timeout=300)
+
+    def query(self, session_messages):
+        """
+        Passes the chat history to Claude and returns the response text.
+        Token usage is recorded for each call.
+
+        Args:
+            session_messages (list[dict]): [{"role": str, "content": str}, …]
+        """
+        response = self.client.messages.create(
+            model=self.model, max_tokens=16000, messages=session_messages
+        )
+        if self.logger is not None:
+            self.logger.log_usage(
+                {
+                    "model": self.model,
+                    "stop_reason": response.stop_reason,
+                    **response.usage.to_dict(),
+                }
+            )
+        return "".join(b.text for b in response.content if b.type == "text")
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("client", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.client = anthropic.Anthropic(
+            api_key=self.api_key, max_retries=5, timeout=300
+        )
 
 class Ollama_LLM(LLM):
     def __init__(self, model="llama3.2", **kwargs):

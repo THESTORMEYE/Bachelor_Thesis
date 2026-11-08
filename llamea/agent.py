@@ -45,7 +45,7 @@ class Agent:
         invokes the named tool, appends the result to the conversation, and issues
         another query. The first reply that lacks tool blocks is treated as the
         solution. If ``max_tool_rounds`` is reached, the model is prompted to
-        answer directly without tools. If code is ommitted, the previous version is 
+        answer directly without tools. If code is ommitted, the previous version is
         used.
 
     Persistence:
@@ -106,16 +106,17 @@ class Agent:
         )
         return textwrap.dedent("""
             ## Tools  
-            You may call tools before answering. They can reveal details not in this prompt, 
-            so checking first often improves designs. Invoke them by replying with blocks like:
+            Before answering, use at least one tool. Tools reveal information not
+            included in this prompt, and tool calls don’t affect your score. 
+            Use blocks like this, alone or next to your code:
 
             ```tool
             {"name": "<tool name>", "arguments": {<arguments>}}
             ```
 
-            Results are returned to you. Tool-call rounds are limited to %d. Afterward, give
-            the final answer in the required format without tool blocks; repeat the full code only 
-            if it has changed since your last output.
+            Results are returned to you. Tool-call rounds are limited to %d. A reply without
+            tool blocks is your final answer; give it in the required format and repeat the full
+            code only if it has changed since your last output.
 
             Tools at your disposal:
             """) % self.max_tool_rounds + tools

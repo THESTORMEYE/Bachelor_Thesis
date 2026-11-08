@@ -6,6 +6,7 @@ from .ela import BBOBELATool, BBOBOracleTool
 from .llamea import LLaMEA
 from .llm import (
     LLM,
+    Claude_LLM,
     Dummy_LLM,
     Gemini_LLM,
     Multi_LLM,

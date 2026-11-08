@@ -28,21 +28,26 @@ class ExperimentTool(Tool):
         self.timeout = timeout
         self.max_output_chars = max_output_chars
         self.description = (
-            "Runs the experiment block in this reply as a Python script beside "
-            "your latest complete code; the script can import that code with "
-            "`from candidate import <ClassName>`. Its printed output is returned. "
-            "You design the experiment. numpy, scipy, and ioh are available "
-            "(`ioh.get_problem(fid, instance, dimension)`, called as `problem(x)`). "
-            f"Timeout: {timeout} s; each stream keeps only its last "
-            f"{max_output_chars} characters. Format:\n"
-            "  ```experiment\n  <python script>\n  ```"
-)
+            "Executes the experiment block from this reply as a Python script alongside "
+            "the full code you provided in this reply, or in your most recent reply "
+            "containing such code; code from the prompt's parent does not count. The "
+            "script may import that code via `from candidate import <ClassName>`. The "
+            "script's printed output is returned. You design the experiment. numpy, scipy, "
+            "and ioh are available (`ioh.get_problem(fid, instance, dimension)`, "
+            f"invoked as `problem(x)`). Timeout: {timeout} s; each stream retains "
+            f"only its last {max_output_chars} characters. Include three distinct "
+            "blocks in a single reply: your code in the required format, then\n"
+            "```experiment\n<python script>\n```\n"
+            "```tool\n"
+            '{"name": "run_experiment", "arguments": {}}\n'
+            "```"
+        )
 
     def run(self, context: ToolContext) -> dict:
         if context.draft is None:
             raise ValueError(
-                "This reply has no code block. Include the complete code in the "
-                "required format in the same reply as the tool block."
+                "This reply has no code block. Reply again with the complete code in "
+                "the required format, the experiment block and the tool block."
             )
         if context.script is None:
             raise ValueError(
