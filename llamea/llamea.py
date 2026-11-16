@@ -7,6 +7,7 @@ import concurrent.futures
 import contextlib
 import logging
 import math
+import multiprocessing
 import os
 import random
 import re
@@ -561,8 +562,11 @@ class LLaMEA:
             )
         except Exception as e:
             print(f"Parallel time out in initialization {e}, retrying.")
-        for p in population_gen:
-            population.append(p)
+        try:
+            for p in population_gen:
+                population.append(p)
+        except multiprocessing.TimeoutError:
+            population += self._timed_out(self.n_parents - len(population))
 
         if self.evaluate_population:
             population = self.evaluate_population_fitness(population)
@@ -578,6 +582,17 @@ class LLaMEA:
         self.generation += 1
         self.population = population  # Save the entire population
         self.update_best()
+
+    def _timed_out(self, count):
+        """Failed solutions instead of termination by `eval_timeout`."""
+        solutions = []
+        for _ in range(count):
+            solution = Solution(name="", code="", generation=self.generation)
+            error = TimeoutError(f"Exceeded the timeout of {self.eval_timeout} s")
+            solution.set_scores(self.worst_value, feedback="", error=error)
+            self.logevent(f"Solution failed: {solution.error}")
+            solutions.append(solution)
+        return solutions
 
     # endregion
     # region Evaluator
@@ -1152,7 +1167,7 @@ The selected solutions to update are:\n\n"""
                 count=(operator.number_of_parents or 2) - 1
             ) + [individual_copy]
             self.logevent(f"Parent count: {len(parents)}")
-            parent_ids = [parent.id for parent in parents]
+            parent_ids = [parent.id for parent in parents[:-1]] + [individual.id]
             new_prompt = self.construct_prompt(parents, operator)
 
         evolved_individual = individual.empty_copy()
@@ -1338,10 +1353,15 @@ The selected solutions to update are:\n\n"""
             except Exception as e:
                 print("Parallel time out .")
 
-            for p in new_population_gen:
-                if math.isnan(p.fitness):
-                    p.fitness = self.worst_value
-                new_population.append(p)
+            try:
+                for p in new_population_gen:
+                    if math.isnan(p.fitness):
+                        p.fitness = self.worst_value
+                    new_population.append(p)
+            except multiprocessing.TimeoutError:
+                new_population += self._timed_out(
+                    len(new_offspring_population) - len(new_population)
+                )
 
             if self.evaluate_population:
                 new_population = self.evaluate_population_fitness(new_population)

@@ -23,10 +23,11 @@ class ToolContext:
     run data that the evaluation function saved for those solutions.
     - log_dir: The experiment's directory, provided when logging is turned on.
     - caller: The agent's name that initiated the call.
-    - draft: The latest candidate extracted from the response(s). None if no such code has yet been parsed.  
+    - draft: The latest candidate extracted from the response(s). None if no such code has yet been parsed.
     - script: The ``experiment`` block from this reply, if any; otherwise None.
     - call_id: This call's identifier, stored with the log; tools may use it to
     name saved data.
+    - state: Scratch space shared by all tool calls made for one solution.
     """
 
     parent_ids: list = field(default_factory=list)
@@ -35,6 +36,7 @@ class ToolContext:
     draft: Solution | None = None
     script: str | None = None
     call_id: str = ""
+    state: dict = field(default_factory=dict)
 
 
 class Tool(ABC):

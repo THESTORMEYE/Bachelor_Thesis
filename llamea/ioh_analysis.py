@@ -16,8 +16,9 @@ AOCC_LOWER, AOCC_UPPER = 1e-8, 1e2
 CHECKPOINTS = (0.1, 0.25, 0.5, 1.0)
 
 METRICS = (
-    "Metrics: AOCC dispersion (1.0 = best), median best-so-far gap "
-    "(f − f_opt) at 10/25/50/100% of budget, and median last-improvement."
+    "Returns the min/median/max AOCC over runs (1.0 is the best), the median "
+    "best-so-far gap f - f_opt at 10/25/50/100% of the budget, and the median "
+    "evaluation count of the last improvement."
 )
 
 
@@ -73,8 +74,8 @@ class IOHAnalysisTool(Tool):
     name = "performance_analysis"
 
     description = (
-        "Captures how your parent algorithms performed in practice, before you "
-        "mutate them: convergence speed, stagnation points, and consistency. " + METRICS
+        "For each solution selected for updating, shows how it converged over "
+        "its scored runs, keyed by its number in the prompt. " + METRICS
     )
 
     parameters = {"type": "object", "properties": {}}
@@ -90,6 +91,8 @@ class IOHAnalysisTool(Tool):
         if context.log_dir is None:
             raise ValueError("Run data requires logging enabled.")
         return {
-            pid: analyse_runs(os.path.join(context.log_dir, "ioh", pid), self.budget)
-            for pid in context.parent_ids
+            f"# {i}": analyse_runs(
+                os.path.join(context.log_dir, "ioh", pid), self.budget
+            )
+            for i, pid in enumerate(context.parent_ids, 1)
         }

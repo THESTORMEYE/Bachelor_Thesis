@@ -86,8 +86,9 @@ def separability(problem, dim, samples=SEPARABILITY_SAMPLES, tol=1e-6, seed=0):
 
 class BBOBELATool(Tool):
     """
-    ELA predictions are averaged over BBOB instances and precomputed at 
+    ELA predictions are averaged over BBOB instances and precomputed at
     construction time. Separability is detected via a finite-difference test.
+    `evaluations` is the number of function evaluations this took.
 
     Args:
         fid: BBOB function id.
@@ -98,14 +99,14 @@ class BBOBELATool(Tool):
     name = "landscape_analysis"
 
     description = (
-        "Reveals the target function's structure via [0,1] scores "
+        "Reveals the black-box function's structure via [0,1] scores "
         "(0 none, 1 high) for Basins (uniform sizes), "
         "GlobalLocal (sharp global-local contrast), Homogeneous (no phase transitions), "
         "Multimodality (many local optima), and Separable (dimension-wise decomposable)."
-        )
-
+    )
 
     parameters = {"type": "object", "properties": {}}
+    evaluations = 0
 
     def __init__(self, fid: int, iids: list[int], dim: int):
         if ioh is None:
@@ -132,6 +133,7 @@ class BBOBELATool(Tool):
                     "Separable": separability(problem, dim),
                 }
             )
+            self.evaluations += problem.state.evaluations
         self.properties = {
             prop: float(np.mean([s[prop] for s in scores])) for prop in PROPERTIES
         }
@@ -221,14 +223,6 @@ class BBOBOracleTool(BBOBELATool):
     Args:
         fid: BBOB function ID.
     """
-
-    description = (
-        "Reveals the target function's structure via [0,1] scores "
-        "(0 none, 1 high) for Basins (uniform sizes), "
-        "GlobalLocal (sharp global-local contrast), Homogeneous (no phase transitions), "
-        "Multimodality (many local optima), and Separable (dimension-wise decomposable)."
-        )
-
 
     def __init__(self, fid: int):
         self.properties = {

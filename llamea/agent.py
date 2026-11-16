@@ -44,12 +44,14 @@ class Agent:
         ``{"name": ..., "arguments": {...}}``. For every such block, the agent
         invokes the named tool, appends the result to the conversation, and issues
         another query. The first reply that lacks tool blocks is treated as the
-        solution. If ``max_tool_rounds`` is reached, the model is prompted to
-        answer directly without tools. If code is ommitted, the previous version is
+        solution, unless it is the model's opening reply, which gets one reminder
+        to call a tool. If ``max_tool_rounds`` is reached, the model is prompted to
+        answer directly without tools. If code is omitted, the previous version is
         used.
 
     Persistence:
-        Every call lands in ``solution.metadata["tool_calls"]``. When logging is on,
+        Every call lands in ``solution.metadata["tool_calls"]`` and the tools'
+        shared state in ``solution.metadata["tool_state"]``. When logging is on,
         each complete entry (tool outputs, the reply's draft code and experiment
         script, and how long the call took) goes to ``tool_calls.jsonl``.
 
@@ -100,25 +102,26 @@ class Agent:
 
     def tool_instructions(self) -> str:
         tools = "\n".join(
-            f"- {t.name}: {t.description}\n  arguments in JSON format: "
+            f"- {t.name}: {t.description}\n  arguments (JSON schema): "
             f"{json.dumps(t.parameters)}"
             for t in self.tools.values()
         )
         return textwrap.dedent("""
-            ## Tools  
-            Before answering, use at least one tool. Tools reveal information not
-            included in this prompt, and tool calls don’t affect your score. 
-            Use blocks like this, alone or next to your code:
+            ## Tools
+            Before giving your final answer, call at least one tool; tool calls do not affect
+            your score. Call a tool with a block of the form below, either by itself or
+            alongside your code:
 
             ```tool
             {"name": "<tool name>", "arguments": {<arguments>}}
             ```
 
-            Results are returned to you. Tool-call rounds are limited to %d. A reply without
-            tool blocks is your final answer; give it in the required format and repeat the full
-            code only if it has changed since your last output.
+            Results are then returned to you. You may perform at most %d rounds of tool calls. A
+            response with no tool blocks is treated as your final answer: return it in the required
+            format, but you may leave out the code if it has not changed since your last reply
+            containing code.
 
-            Tools at your disposal:
+            Available tools:
             """) % self.max_tool_rounds + tools
 
     def sample_solution(
@@ -159,26 +162,40 @@ class Agent:
                 diff_mode=diff_mode,
             )
 
+        def latest_draft(reply):
+            try:
+                return parse(reply)
+            except NoCodeException:
+                return draft
+            except Exception:
+                return None
+
         try:
             response = self._query(messages)
+            if self.tools and not self.call_pattern.search(response):
+                messages.append({"role": "assistant", "content": response})
+                draft = latest_draft(response)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "No tool call has been made yet. Call at least "
+                        "one tool before your final answer.",
+                    }
+                )
+                response = self._query(messages)
             for round_ in range(1, self.max_tool_rounds + 2):
                 calls = self.call_pattern.findall(response) if self.tools else []
                 if not calls:
                     break
                 messages.append({"role": "assistant", "content": response})
-                try:
-                    draft = parse(response)
-                except NoCodeException:
-                    pass
-                except Exception:
-                    draft = None
+                draft = latest_draft(response)
                 if round_ > self.max_tool_rounds:
                     messages.append(
                         {
                             "role": "user",
-                            "content": "Your tool budget has been exhausted. Please "
-                            "provide your final answer now, without using any tool "
-                            "blocks.",
+                            "content": "No rounds of tool calls are left, so these "
+                            "calls were not run. Give your final answer now, without "
+                            "tool blocks.",
                         }
                     )
                 else:
@@ -205,6 +222,7 @@ class Agent:
                     for r in records
                 ],
             )
+            solution.add_metadata("tool_state", context.state)
             return solution
         finally:
             self._log(records, solution, context)

@@ -118,6 +118,7 @@ class ExperimentLogger:
             jsonlines.open(f"{self.dirname}/usage.jsonl", "a") as file,
         ):
             file.write({"time": f"{datetime.now()}", **record})
+
     def _lock(self):
         return FileLock(os.path.join(self.dirname, ".log.lock"))
 

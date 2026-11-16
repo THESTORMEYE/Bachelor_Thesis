@@ -20,23 +20,28 @@ class ExperimentTool(Tool):
     Args:
     timeout: Kill the script after this many seconds.
     max_output_chars: How many trailing characters to keep per stream.
+    setup: Factory for a context manager ``setup(context, folder)`` that wraps the
+        script run; it can add files to the scratch dir. Yields a dict merged
+        into the result. Must be picklable.
+    notes: Text explaining what ``setup`` gives the script; appended to the tool
+        description.
     """
 
     name = "run_experiment"
 
-    def __init__(self, timeout: float, max_output_chars: int):
+    def __init__(self, timeout: float, max_output_chars: int, setup, notes: str):
         self.timeout = timeout
         self.max_output_chars = max_output_chars
+        self.setup = setup
+
         self.description = (
-            "Executes the experiment block from this reply as a Python script alongside "
-            "the full code you provided in this reply, or in your most recent reply "
-            "containing such code; code from the prompt's parent does not count. The "
-            "script may import that code via `from candidate import <ClassName>`. The "
-            "script's printed output is returned. You design the experiment. numpy, scipy, "
-            "and ioh are available (`ioh.get_problem(fid, instance, dimension)`, "
-            f"invoked as `problem(x)`). Timeout: {timeout} s; each stream retains "
-            f"only its last {max_output_chars} characters. Include three distinct "
-            "blocks in a single reply: your code in the required format, then\n"
+            "Runs this reply's experiment block as a Python script, returning "
+            f"the final {max_output_chars} characters of stdout and stderr. "
+            "The script may import your code via `from candidate import "
+            "<ClassName>`. Your code comes from this reply. If this reply has no code, it comes from your "
+            f"most recent reply containing code. It never comes from the prompt. {notes} "
+            f"Timeout: {timeout} s. The initial call requires three blocks in one reply: "
+            "your code in the required format, then\n"
             "```experiment\n<python script>\n```\n"
             "```tool\n"
             '{"name": "run_experiment", "arguments": {}}\n'
@@ -46,15 +51,18 @@ class ExperimentTool(Tool):
     def run(self, context: ToolContext) -> dict:
         if context.draft is None:
             raise ValueError(
-                "This reply has no code block. Reply again with the complete code in "
-                "the required format, the experiment block and the tool block."
+                "No usable code found. Reply again with the complete code in the "
+                "required format, the experiment block and the tool block."
             )
         if context.script is None:
             raise ValueError(
                 "This reply has no experiment block. Include one in the same "
                 "reply as the tool block."
             )
-        with tempfile.TemporaryDirectory() as tmp:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            self.setup(context, tmp) as extra,
+        ):
             for filename, text in [
                 ("candidate.py", context.draft.code),
                 ("experiment.py", context.script),
@@ -77,6 +85,7 @@ class ExperimentTool(Tool):
             "stdout": self._tail(result.stdout, tmp),
             "stderr": self._tail(result.stderr, tmp),
             "timed_out": result.returncode is None,
+            **extra,
         }
 
     def _tail(self, text, tmp: str) -> str:

@@ -2,8 +2,6 @@
 Quickly test the draft on unseen problem instances.
 """
 
-import os
-
 from .tools import Tool, ToolContext
 
 
@@ -12,24 +10,25 @@ class QuickEvalTool(Tool):
     Runs the draft from the current reply.
 
     Args:
-    evaluate: Callable ``evaluate(solution, runs, folder) -> dict``; may save run
-        data under ``<log_dir>/quick_eval/<call_id>``. Must be picklable.
+    evaluate: Callable ``evaluate(context, runs) -> dict`` that runs
+        ``context.draft``; may save run data under
+        ``<log_dir>/quick_eval/<call_id>``. Must be picklable.
     max_runs: Max value for ``runs``.
-    metrics: Text describing what ``evaluate`` returns; added to the tool
-        description.
+    notes: Text describing what ``evaluate`` returns and costs; added to the
+        tool description.
     """
 
     name = "quick_eval"
 
-    def __init__(self, evaluate, max_runs: int, metrics: str):
+    def __init__(self, evaluate, max_runs: int, notes: str):
         self.evaluate = evaluate
         self.max_runs = max_runs
         self.description = (
-            "Scores the complete code from this reply—or from your most recent reply "
-            "containing code—on problem instances excluded from scoring. Code from "
-            "the prompt's parent does not count: put your code first, in the required "
-            "format, in the same reply as the tool block. More runs yield a more "
-            f"reliable estimate. {metrics}"
+            "Executes your code on function instances that scoring does not use. The code "
+            "is taken from this reply, or otherwise from your latest reply that contains "
+            "code, never from the prompt; the first call must include your code, in the "
+            "required format, in the same reply as the tool block. "
+            f"More runs yield a more reliable estimate. {notes}"
         )
         self.parameters = {
             "type": "object",
@@ -42,8 +41,8 @@ class QuickEvalTool(Tool):
     def run(self, context: ToolContext, runs: int) -> dict:
         if context.draft is None:
             raise ValueError(
-                "No code block appears in this reply. "
-                "Reply again with the full code in the required format and the tool block."
+                "No usable code found. Reply again with the complete code in the "
+                "required format and the tool block."
             )
         if context.log_dir is None:
             raise ValueError("Logging must be enabled for quick evaluation.")
@@ -51,5 +50,4 @@ class QuickEvalTool(Tool):
             raise ValueError(
                 f"`runs` has to be an integer between 1 and {self.max_runs}."
             )
-        folder = os.path.join(context.log_dir, "quick_eval", context.call_id)
-        return self.evaluate(context.draft, runs, folder)
+        return self.evaluate(context, runs)

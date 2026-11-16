@@ -481,6 +481,7 @@ class Gemini_LLM(LLM):
 
                 time.sleep(wait)
 
+
 class Claude_LLM(LLM):
     """
     Handles requests to Anthropic Claude models.
@@ -530,6 +531,7 @@ class Claude_LLM(LLM):
         self.client = anthropic.Anthropic(
             api_key=self.api_key, max_retries=5, timeout=300
         )
+
 
 class Ollama_LLM(LLM):
     def __init__(self, model="llama3.2", **kwargs):
