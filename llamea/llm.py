@@ -317,6 +317,15 @@ class OpenAI_LLM(LLM):
                     messages=session_messages,
                     temperature=self.temperature,
                 )
+                if self.logger is not None:
+                    self.logger.log_usage(
+                        {
+                            "model": self.model,
+                            "stop_reason": response.choices[0].finish_reason,
+                            "input_tokens": response.usage.prompt_tokens,
+                            "output_tokens": response.usage.completion_tokens,
+                        }
+                    )
                 return response.choices[0].message.content
 
             except openai.RateLimitError as err:

@@ -64,6 +64,8 @@ class Agent:
         max_result_chars: If a tool returns more than this many characters, the
             excess is removed from the message sent back to the model; the log
             retains the full output.
+        require_tool_call: If False, the prompt only offers the tools and a first
+            reply without a tool call is accepted as the answer.
     """
 
     call_pattern = re.compile(r"```tool\s*\n(.*?)\n\s*```", re.DOTALL)
@@ -76,6 +78,7 @@ class Agent:
         name: str = "llamea",
         max_tool_rounds: int = 3,
         max_result_chars: int = 4000,
+        require_tool_call: bool = True,
     ):
         self.llm = llm
         self.tools = {tool.name: tool for tool in tools}
@@ -84,6 +87,7 @@ class Agent:
         self.name = name
         self.max_tool_rounds = max_tool_rounds
         self.max_result_chars = max_result_chars
+        self.require_tool_call = require_tool_call
         self.logger = None
 
     @property
@@ -106,9 +110,12 @@ class Agent:
             f"{json.dumps(t.parameters)}"
             for t in self.tools.values()
         )
+        rule = (
+            "call at least one tool" if self.require_tool_call else "you may call tools"
+        )
         return textwrap.dedent("""
             ## Tools
-            Before giving your final answer, call at least one tool; tool calls do not affect
+            Before giving your final answer, %s; tool calls do not affect
             your score. Call a tool with a block of the form below, either by itself or
             alongside your code:
 
@@ -122,7 +129,7 @@ class Agent:
             containing code.
 
             Available tools:
-            """) % self.max_tool_rounds + tools
+            """) % (rule, self.max_tool_rounds) + tools
 
     def sample_solution(
         self,
@@ -172,7 +179,11 @@ class Agent:
 
         try:
             response = self._query(messages)
-            if self.tools and not self.call_pattern.search(response):
+            if (
+                self.tools
+                and self.require_tool_call
+                and not self.call_pattern.search(response)
+            ):
                 messages.append({"role": "assistant", "content": response})
                 draft = latest_draft(response)
                 messages.append(

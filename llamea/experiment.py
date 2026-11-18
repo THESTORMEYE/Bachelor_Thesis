@@ -2,14 +2,58 @@
 Run a model-written experiment on the written code.
 """
 
+import math
 import os
 import subprocess
 import sys
 import tempfile
+import time
+
+import psutil
 
 from .tools import Tool, ToolContext
 
 ENV_KEYS = ("PATH", "SYSTEMROOT")
+
+
+def run_limited(args, timeout, max_memory=math.inf, input=None, **kwargs):
+    """
+    Like `subprocess.run`, but kills the process and children on `timeout` 
+    seconds or `max_memory` bytes combined; returns `CompletedProcess` and kill reason ("timeout", "memory" or None).
+    """
+    process = psutil.Popen(args, **kwargs)
+    end = time.monotonic() + timeout
+    reason = None
+    while True:
+        try:
+            out, err = process.communicate(input, timeout=0.2)
+            break
+        except subprocess.TimeoutExpired:
+            input = None  # already sent
+        try:
+            tree = [process, *process.children(recursive=True)]
+            memory = sum(_memory(p) for p in tree)
+        except psutil.NoSuchProcess:
+            continue
+        if time.monotonic() > end:
+            reason = "timeout"
+        elif memory > max_memory:
+            reason = "memory"
+        if reason:
+            for p in tree:
+                try:
+                    p.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            out, err = process.communicate()
+            break
+    return subprocess.CompletedProcess(args, process.returncode, out, err), reason
+
+
+def _memory(process):
+    """Amount of Bytes held""" 
+    info = process.memory_info()
+    return getattr(info, "private", info.rss)
 
 
 class ExperimentTool(Tool):
@@ -25,12 +69,21 @@ class ExperimentTool(Tool):
         into the result. Must be picklable.
     notes: Text explaining what ``setup`` gives the script; appended to the tool
         description.
+    max_memory: Kill the script if more than this many bytes.
     """
 
     name = "run_experiment"
 
-    def __init__(self, timeout: float, max_output_chars: int, setup, notes: str):
+    def __init__(
+        self,
+        timeout: float,
+        max_output_chars: int,
+        setup,
+        notes: str,
+        max_memory: float = math.inf,
+    ):
         self.timeout = timeout
+        self.max_memory = max_memory
         self.max_output_chars = max_output_chars
         self.setup = setup
 
@@ -69,22 +122,22 @@ class ExperimentTool(Tool):
             ]:
                 with open(os.path.join(tmp, filename), "w", encoding="utf-8") as f:
                     f.write(text)
-            try:
-                result = subprocess.run(
-                    [sys.executable, "experiment.py"],
-                    cwd=tmp,
-                    env={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                )
-            except subprocess.TimeoutExpired as e:
-                result = subprocess.CompletedProcess(e.cmd, None, e.stdout, e.stderr)
+            result, killed = run_limited(
+                [sys.executable, "experiment.py"],
+                self.timeout,
+                self.max_memory,
+                cwd=tmp,
+                env={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
         return {
-            "returncode": result.returncode,
+            "returncode": None if killed else result.returncode,
             "stdout": self._tail(result.stdout, tmp),
             "stderr": self._tail(result.stderr, tmp),
-            "timed_out": result.returncode is None,
+            "timed_out": killed == "timeout",
+            **({"memory_exceeded": True} if killed == "memory" else {}),
             **extra,
         }
 

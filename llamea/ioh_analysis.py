@@ -90,6 +90,8 @@ class IOHAnalysisTool(Tool):
     def run(self, context: ToolContext) -> dict:
         if context.log_dir is None:
             raise ValueError("Run data requires logging enabled.")
+        if not context.parent_ids:
+            return {"summary": "No solution has been selected for updating yet."}
         return {
             f"# {i}": analyse_runs(
                 os.path.join(context.log_dir, "ioh", pid), self.budget

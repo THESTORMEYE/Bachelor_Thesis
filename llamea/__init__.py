@@ -7,6 +7,7 @@ from .llamea import LLaMEA
 from .llm import (
     LLM,
     Claude_LLM,
+    DeepSeek_LLM,
     Dummy_LLM,
     Gemini_LLM,
     Multi_LLM,
